@@ -38,7 +38,7 @@ Options:
 import argparse
 import json
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -188,7 +188,7 @@ def main() -> None:
                               args.sensors, args.vendors)
     new = [f for f in features if f["id"] not in seen]
 
-    ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     print(f"[{ts}] catalog returned {len(features)} scenes, {len(new)} new")
 
     for f in new[: args.max_alerts]:
