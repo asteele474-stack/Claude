@@ -2,7 +2,8 @@
 BlackSky Catalog Watcher — New Imagery Alert over China
 ========================================================
 Polls the BlackSky archive catalog (/catalog/stac/search) for newly added
-scenes over a China AOI and pushes an alert (LINE / Slack) for each new one.
+scenes over a China AOI and pushes an alert (LINE / Slack / email) for each
+new one.
 
 Why polling instead of webhooks or archive subscriptions:
   - Webhooks only fire for YOUR tasking plan items — not catalog additions.
@@ -18,6 +19,12 @@ Usage:
     LINE_CHANNEL_ACCESS_TOKEN=...   (optional)
     LINE_TO_ID=...                  (optional)
     SLACK_WEBHOOK_URL=...           (optional)
+    EMAIL_SMTP_HOST=...             (optional, e.g. smtp.gmail.com)
+    EMAIL_SMTP_PORT=587             (optional, 465 for implicit SSL)
+    EMAIL_USERNAME=...              (optional, SMTP login)
+    EMAIL_PASSWORD=...              (optional, SMTP password / app password)
+    EMAIL_FROM=...                  (optional, defaults to EMAIL_USERNAME)
+    EMAIL_TO=you@example.com,other@example.com   (optional, comma-separated)
 
   # one-off:
   python catalog_watcher.py --lookback PT2H
@@ -38,7 +45,9 @@ Options:
 import argparse
 import json
 import os
+import smtplib
 from datetime import datetime, timezone
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import requests
@@ -51,6 +60,12 @@ HEADERS = {"Authorization": os.environ["BLACKSKY_API_KEY"]}
 LINE_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_TO = os.getenv("LINE_TO_ID")
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+EMAIL_SMTP_HOST = os.getenv("EMAIL_SMTP_HOST")
+EMAIL_SMTP_PORT = int(os.getenv("EMAIL_SMTP_PORT", "587"))
+EMAIL_USERNAME = os.getenv("EMAIL_USERNAME")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_FROM = os.getenv("EMAIL_FROM", EMAIL_USERNAME)
+EMAIL_TO = os.getenv("EMAIL_TO")
 
 STATE_FILE = Path(__file__).with_name("seen_scenes.json")
 MAX_SEEN = 20000  # cap the dedup cache
@@ -165,6 +180,27 @@ def notify(text: str, quiet: bool) -> None:
         )
     if SLACK_WEBHOOK_URL:
         requests.post(SLACK_WEBHOOK_URL, json={"text": text}, timeout=30)
+    if EMAIL_SMTP_HOST and EMAIL_USERNAME and EMAIL_PASSWORD and EMAIL_TO:
+        send_email(text)
+
+
+def send_email(text: str) -> None:
+    subject = text.splitlines()[0] if text else "BlackSky alert"
+    msg = MIMEText(text)
+    msg["Subject"] = f"[BlackSky] {subject}"[:200]
+    msg["From"] = EMAIL_FROM
+    msg["To"] = EMAIL_TO
+    recipients = [addr.strip() for addr in EMAIL_TO.split(",") if addr.strip()]
+
+    if EMAIL_SMTP_PORT == 465:
+        with smtplib.SMTP_SSL(EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, timeout=30) as server:
+            server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_FROM, recipients, msg.as_string())
+    else:
+        with smtplib.SMTP(EMAIL_SMTP_HOST, EMAIL_SMTP_PORT, timeout=30) as server:
+            server.starttls()
+            server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_FROM, recipients, msg.as_string())
 
 
 # --------------------------------------------------------------------------
