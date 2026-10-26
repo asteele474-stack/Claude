@@ -15,7 +15,7 @@ trading_client = TradingClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SE
 data_client = StockHistoricalDataClient(os.getenv("ALPACA_API_KEY"), os.getenv("ALPACA_SECRET_KEY"))
 claude_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-TICKER = "AAPL"
+TICKER = os.getenv("TICKER", "AAPL").upper()
 
 # 2. Fetch Market Data for Context
 end_time = datetime.now()
